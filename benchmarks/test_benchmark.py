@@ -7,6 +7,7 @@ from graphs.generators import generate_random_graph, generate_scale_free_graph, 
 class TestBenchmark:
     def __init__(self, brute_force_max_clique,
                        BacktrackingClique,
+                       divide_conquer_clique,
                        dp_clique_bitmask,
                        greedy_clique_degree,
                        greedy_clique_with_restarts,
@@ -15,7 +16,8 @@ class TestBenchmark:
 
         self.algorithms = {
             'forca_bruta': brute_force_max_clique,
-            'backtracking': lambda g: BacktrackingClique(g).backtracking_max_clique(),
+            'backtracking': BacktrackingClique,
+            'divide_conquer': divide_conquer_clique,
             'programacao_dinamica': dp_clique_bitmask,
             'guloso_grau': greedy_clique_degree,
             'guloso_reinicios': lambda g: greedy_clique_with_restarts(g, 10),
