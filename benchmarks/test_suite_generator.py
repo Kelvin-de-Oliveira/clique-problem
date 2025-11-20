@@ -1,61 +1,44 @@
-from graphs.generators import generate_random_graph, generate_scale_free_graph, generate_clique_based_graph
+import random
+from graphs.generators import generate_random_graph
 
 class TestSuiteGenerator:
     """
-    Classe responsável apenas por gerar suítes de grafos para benchmarks.
+    Classe ajustada para gerar suítes controladas por tamanho de grafo e semente,
+    separadas por tipo de algoritmo.
     """
-    @staticmethod
-    def generate_small_graphs():
-        return [
-            generate_random_graph(15, 0.3),
-            generate_random_graph(15, 0.5),
-            generate_random_graph(15, 0.7),
-            generate_random_graph(20, 0.3),
-            generate_random_graph(20, 0.5)
-        ]
 
     @staticmethod
-    def generate_medium_graphs():
-        return [
-            generate_random_graph(30, 0.2),
-            generate_random_graph(30, 0.4),
-            generate_random_graph(50, 0.2),
-            generate_random_graph(50, 0.3)
-        ]
-
-    @staticmethod
-    def generate_large_graphs():
-        return [
-            generate_random_graph(100, 0.1),
-            generate_random_graph(100, 0.2),
-            generate_random_graph(200, 0.1)
-        ]
-
-    @staticmethod
-    def generate_scale_free_graphs():
-        return [
-            generate_scale_free_graph(50, 2),
-            generate_scale_free_graph(100, 3),
-            generate_scale_free_graph(200, 4)
-        ]
-
-    @staticmethod
-    def generate_clique_based_graphs():
-        return [
-            generate_clique_based_graph(30, 8, 50),
-            generate_clique_based_graph(50, 12, 100),
-            generate_clique_based_graph(100, 15, 200)
-        ]
+    def generate_graphs_for_algorithm(ns, p=0.1, instances_per_n=3):
+        """
+        Gera múltiplas instâncias de grafos aleatórios para cada n em ns.
+        """
+        graphs = []
+        for n in ns:
+            for seed in range(instances_per_n):
+                random.seed(seed)  # para reprodutibilidade
+                g = generate_random_graph(n, p)
+                graphs.append((n, g))  # tupla (tamanho, grafo)
+        return graphs
 
     @classmethod
     def generate_test_suite(cls):
         """
-        Retorna um dicionário com todas as suítes de teste.
+        Retorna um dicionário com as suítes ajustadas para cada tipo de algoritmo.
         """
+        # Série de n por tipo de algoritmo
+        ns_expo = [6, 8, 10, 12, 14, 16, 18, 20, 22, 24]       # força bruta / DP
+        ns_bt = [10, 12, 14, 16, 18, 20, 22, 24, 26, 28]       # backtracking
+        ns_heur = [30, 50, 80, 120, 200, 300, 450, 700]        # heurísticas/gulosos
+
         return {
-            "pequenos_aleatorios": cls.generate_small_graphs(),
-            "medios_aleatorios": cls.generate_medium_graphs(),
-            "grandes_aleatorios": cls.generate_large_graphs(),
-            "scale_free": cls.generate_scale_free_graphs(),
-            "clique_embutida": cls.generate_clique_based_graphs()
+            "forca_bruta": cls.generate_graphs_for_algorithm(ns_expo, p=0.1),
+            "programacao_dinamica": cls.generate_graphs_for_algorithm(ns_expo, p=0.1),
+            "backtracking": cls.generate_graphs_for_algorithm(ns_bt, p=0.1),
+            "guloso_grau": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
+            "guloso_reinicios": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
+            "guloso_min_degree": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
+            "guloso_core": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
+            "heuristica_coloring": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
+            "heuristica_local_search": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
+            "meta_heuristica_genetico": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
         }
