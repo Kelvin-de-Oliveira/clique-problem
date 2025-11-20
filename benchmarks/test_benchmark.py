@@ -4,9 +4,11 @@ import os
 import json
 from collections import defaultdict
 from typing import Dict, Any, Type
+from memory_profiler import memory_usage
 
 from benchmarks.test_suite_generator import TestSuiteGenerator
 import psutil
+
 
 
 class TestBenchmark:
@@ -25,7 +27,6 @@ class TestBenchmark:
         Mede tempo e memória. Usa signal.SIGALRM para timeout (Unix).
         """
         start_time = time.time()
-        start_mem = self.get_memory_usage()
 
         try:
             class TimeoutError(Exception):
@@ -34,29 +35,31 @@ class TestBenchmark:
             def timeout_handler(signum, frame):
                 raise TimeoutError()
 
-            # registra handler e seta alarme
+             # registra handler e seta alarme
             signal.signal(signal.SIGALRM, timeout_handler)
             signal.alarm(timeout)
 
-            # instancia e executa
-            instance = AlgoClass(graph)
-            result = instance.run()
-
+            # função que executa o algoritmo
+            def run_instance():
+                instance = AlgoClass(graph)
+                return instance.run()
+            
+            # roda e mede pico de memória em MB
+            mem_usage, result = memory_usage((run_instance,), retval=True, max_usage=True)
             # desliga alarme
             signal.alarm(0)
 
             end_time = time.time()
-            end_mem = self.get_memory_usage()
 
             return {
                 'clique': set(result) if result is not None else set(),
                 'tamanho': len(result) if result is not None else 0,
                 'tempo': end_time - start_time,
-                'memoria': end_mem - start_mem,
+                'memoria': mem_usage * 1024 * 1024,  # converte MB -> bytes
                 'timeout': False,
                 'erro': False
             }
-
+        
         except TimeoutError:
             return {
                 'clique': set(),
@@ -66,6 +69,7 @@ class TestBenchmark:
                 'timeout': True,
                 'erro': False
             }
+        
         except Exception as e:
             return {
                 'clique': set(),
@@ -94,7 +98,6 @@ class TestBenchmark:
                     if len(graph) > 25 and algo_name in ['forca_bruta', 'programacao_dinamica']:
                         print(f"  Pulando {algo_name} (muitos vértices)")
                         continue
-
                     print(f"  Executando {algo_name}...")
                     result = self.run_algorithm(AlgoClass, graph, timeout=timeout_per_run)
                     # armazena
