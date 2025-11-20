@@ -1,85 +1,31 @@
 import time
-from collections import defaultdict
-import psutil
 import signal
-from graphs.generators import generate_random_graph, generate_scale_free_graph, generate_clique_based_graph
+import os
+import json
+from collections import defaultdict
+from typing import Dict, Any, Type
+
+from benchmarks.test_suite_generator import TestSuiteGenerator
+import psutil
+
 
 class TestBenchmark:
-    def __init__(self, brute_force_max_clique,
-                       BacktrackingClique,
-                       divide_conquer_clique,
-                       dp_clique_bitmask,
-                       greedy_clique_degree,
-                       greedy_clique_with_restarts,
-                       approximation_clique_coloring,
-                       local_search_clique):
-
-        self.algorithms = {
-            'forca_bruta': brute_force_max_clique,
-            'backtracking': BacktrackingClique,
-            'divide_conquer': divide_conquer_clique,
-            'programacao_dinamica': dp_clique_bitmask,
-            'guloso_grau': greedy_clique_degree,
-            'guloso_reinicios': lambda g: greedy_clique_with_restarts(g, 10),
-            'aproximacao_coloracao': approximation_clique_coloring,
-            'busca_local': lambda g: local_search_clique(g, greedy_clique_degree(g))
-        }
-
+    """
+    Benchmark que espera um mapeamento nome -> AlgorithmClass (classe que implementa .run()).
+    Ex: {"forca_bruta": BruteForceClique, "backtracking": BacktrackingClique, ...}
+    """
+    def __init__(self, algorithm_classes: Dict[str, Type]):
+        self.algorithm_classes = algorithm_classes
         self.results = defaultdict(dict)
 
-    # ------------------------------------------------------------
-    # Geração do conjunto completo de testes
-    # ------------------------------------------------------------
-    def generate_test_suite(self):
-        """Gera uma suíte completa de testes."""
-        test_suite = {}
-
-        print("Gerando grafos pequenos...")
-        test_suite['pequenos_aleatorios'] = [
-            generate_random_graph(15, 0.3),
-            generate_random_graph(15, 0.5),
-            generate_random_graph(15, 0.7),
-            generate_random_graph(20, 0.3),
-            generate_random_graph(20, 0.5)
-        ]
-
-        print("Gerando grafos médios...")
-        test_suite['medios_aleatorios'] = [
-            generate_random_graph(30, 0.2),
-            generate_random_graph(30, 0.4),
-            generate_random_graph(50, 0.2),
-            generate_random_graph(50, 0.3)
-        ]
-
-        print("Gerando grafos grandes...")
-        test_suite['grandes_aleatorios'] = [
-            generate_random_graph(100, 0.1),
-            generate_random_graph(100, 0.2),
-            generate_random_graph(200, 0.1)
-        ]
-
-        print("Gerando grafos scale-free...")
-        test_suite['scale_free'] = [
-            generate_scale_free_graph(50, 2),
-            generate_scale_free_graph(100, 3),
-            generate_scale_free_graph(200, 4)
-        ]
-
-        print("Gerando grafos com cliques conhecidas...")
-        test_suite['clique_embutida'] = [
-            generate_clique_based_graph(30, 8, 50),
-            generate_clique_based_graph(50, 12, 100),
-            generate_clique_based_graph(100, 15, 200)
-        ]
-
-        return test_suite
-
-    # ------------------------------------------------------------
-    # Execução de um algoritmo com timeout
-    # ------------------------------------------------------------
-    def run_algorithm(self, algorithm, graph, timeout=300):
+    # ---------- execução com timeout ----------
+    def run_algorithm(self, AlgoClass, graph, timeout=300):
+        """
+        Recebe a classe do algoritmo (não instância). Instancia com o grafo e chama .run().
+        Mede tempo e memória. Usa signal.SIGALRM para timeout (Unix).
+        """
         start_time = time.time()
-        start_memory = self.get_memory_usage()
+        start_mem = self.get_memory_usage()
 
         try:
             class TimeoutError(Exception):
@@ -88,20 +34,25 @@ class TestBenchmark:
             def timeout_handler(signum, frame):
                 raise TimeoutError()
 
+            # registra handler e seta alarme
             signal.signal(signal.SIGALRM, timeout_handler)
             signal.alarm(timeout)
 
-            result = algorithm(graph)
+            # instancia e executa
+            instance = AlgoClass(graph)
+            result = instance.run()
 
+            # desliga alarme
             signal.alarm(0)
+
             end_time = time.time()
-            end_memory = self.get_memory_usage()
+            end_mem = self.get_memory_usage()
 
             return {
-                'clique': result,
-                'tamanho': len(result),
+                'clique': set(result) if result is not None else set(),
+                'tamanho': len(result) if result is not None else 0,
                 'tempo': end_time - start_time,
-                'memoria': end_memory - start_memory,
+                'memoria': end_mem - start_mem,
                 'timeout': False,
                 'erro': False
             }
@@ -115,45 +66,63 @@ class TestBenchmark:
                 'timeout': True,
                 'erro': False
             }
-
-        except Exception:
+        except Exception as e:
             return {
                 'clique': set(),
                 'tamanho': 0,
                 'tempo': 0,
                 'memoria': 0,
                 'timeout': False,
-                'erro': True
+                'erro': True,
+                'mensagem_erro': str(e)
             }
 
-    # ------------------------------------------------------------
-    # Medição de memória
-    # ------------------------------------------------------------
     def get_memory_usage(self):
-        process = psutil.Process()
-        return process.memory_info().rss
+        p = psutil.Process()
+        return p.memory_info().rss
 
-    # ------------------------------------------------------------
-    # Execução completa do benchmark
-    # ------------------------------------------------------------
-    def run_benchmarks(self):
-        test_suite = self.generate_test_suite()
+    # ---------- execução completa ----------
+    def run_benchmarks(self, timeout_per_run=300):
+        test_suite = TestSuiteGenerator.generate_test_suite()
 
         for suite_name, graphs in test_suite.items():
             print(f"\n=== Executando suite: {suite_name} ===")
             for i, graph in enumerate(graphs):
-                print(f"Grafo {i + 1}/{len(graphs)} - {len(graph)} vértices")
-                for algo_name, algorithm in self.algorithms.items():
+                print(f"Grafo {i+1}/{len(graphs)} - {len(graph)} vértices")
+                for algo_name, AlgoClass in self.algorithm_classes.items():
+                    # política: evita forca bruta e DP em grafos grandes
                     if len(graph) > 25 and algo_name in ['forca_bruta', 'programacao_dinamica']:
+                        print(f"  Pulando {algo_name} (muitos vértices)")
                         continue
+
                     print(f"  Executando {algo_name}...")
-                    result = self.run_algorithm(algorithm, graph)
+                    result = self.run_algorithm(AlgoClass, graph, timeout=timeout_per_run)
+                    # armazena
                     self.results[suite_name][(i, algo_name)] = result
-                    if result['timeout']:
+
+                    if result.get('timeout'):
                         print("    TIMEOUT")
-                    elif result['erro']:
-                        print("    ERRO")
+                    elif result.get('erro'):
+                        print("    ERRO", result.get('mensagem_erro', ''))
                     else:
                         print(f"    Clique: {result['tamanho']}, Tempo: {result['tempo']:.4f}s")
 
         return self.results
+
+    def save_results_json(self, filename="benchmark_output.json"):
+        output_path = os.path.join("data", "results", "raw", filename)
+
+    # garante que a pasta existe
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        # converte sets em listas para JSON
+        serializable = {}
+        for suite, data in self.results.items():
+            serializable[suite] = {}
+            for key, res in data.items():
+                i, algo_name = key
+                res_copy = res.copy()
+                res_copy['clique'] = list(res_copy.get('clique', []))
+                serializable[suite][f"{i}_{algo_name}"] = res_copy
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(serializable, f, ensure_ascii=False, indent=2)
