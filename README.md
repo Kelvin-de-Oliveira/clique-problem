@@ -11,6 +11,7 @@ O projeto inclui:
 ---
 
 ## Estrutura do Projeto
+```
 
 clique-problem/
 ├── algorithms/          # Implementações dos algoritmos
@@ -23,7 +24,7 @@ clique-problem/
 ├── main.py              # Script principal para rodar benchmarks
 ├── requirements.txt
 └── README.md
-
+```
 ---
 
 ## Requisitos
