@@ -38,3 +38,17 @@ def generate_clique_based_graph(n: int, clique_size: int, noise_edges: int) -> d
             graph[v].add(u)
 
     return graph
+
+def generate_graph(n, tipo, **kwargs):
+    if tipo == "random":
+        return generate_random_graph(n, kwargs.get("p", 0.1))
+    elif tipo == "scale_free":
+        return generate_scale_free_graph(n, kwargs.get("m", 2))
+    elif tipo == "clique":
+        return generate_clique_based_graph(
+            n,
+            kwargs.get("clique_size", min(5, n)),
+            kwargs.get("noise_edges", n)
+        )
+    else:
+        raise ValueError(f"Tipo de grafo desconhecido: {tipo}")
