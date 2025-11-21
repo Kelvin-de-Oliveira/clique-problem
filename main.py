@@ -1,23 +1,28 @@
 import os
+import pandas as pd
 
-from benchmarks.test_benchmark import TestBenchmark
-from data.data_collector import DataCollector
+from benchmarks import TestBenchmark
+from data import DataCollector
+from data.empirical_analysis.plotter import Plotter
+  
 
-from algorithms.exact.brute_force import BruteForceClique
-from algorithms.exact.backtracking import BacktrackingClique
-from algorithms.exact.divide_conquer import DivideConquerClique
+from algorithms import (
+    BruteForceClique, BacktrackingClique, DivideConquerClique, DPCliqueBitmask,
+    GreedyCliqueDegree, GreedyCliqueWithRestarts, GreedyCliqueMinDegree, GreedyCliqueCoreDecomposition,
+    ColoringHeuristicClique, LocalSearchClique, GeneticAlgorithmClique
+)
 
-from algorithms.exact.dp_bitmask import DPCliqueBitmask
-from algorithms.heuristics.greedy.greedy_degree import GreedyCliqueDegree
-from algorithms.heuristics.greedy.greedy_restarts import GreedyCliqueWithRestarts
-from algorithms.heuristics.greedy.greedy_min_degree import GreedyCliqueMinDegree
-from algorithms.heuristics.greedy.greedy_core import GreedyCliqueCoreDecomposition
-from algorithms.heuristics.hybrid.coloring_heuristic import ColoringHeuristicClique
-from algorithms.heuristics.enhancement.local_search import LocalSearchClique
-from algorithms.heuristics.metaheuristics.genetic_algorithm import GeneticAlgorithmClique
+from data.empirical_analysis import (
+    TimeAnalysis,
+    MemoryAnalysis,
+    AnalysisExporter,
+    ReportGenerator,
+)
 
 def main():
+    # -------------------
     # Mapeamento de algoritmos
+    # -------------------
     algorithms = {
         'forca_bruta': BruteForceClique,
         'backtracking': BacktrackingClique,
@@ -31,31 +36,51 @@ def main():
         "heuristica_local_search": LocalSearchClique,
         "meta_heuristica_genetico": GeneticAlgorithmClique,
     }
-
+   
     # -------------------
-    # Roda o benchmark
+    # Roda o benchmark (gera CSVs medianos e individuais)
     # -------------------
     tb = TestBenchmark(algorithms)
-    results = tb.run_benchmarks(timeout_per_run=300)
-
-    # Salva resultados brutos
-    tb.save_results_json("benchmark_output.json")
-    print("Resultados brutos salvos em data/results/raw/benchmark_output.json")
+    tb.run_benchmarks(timeout_per_run=300)  # não precisa mais do return
 
     # -------------------
-    # Processa resultados com DataCollector
+    # DataCollector: lê os CSVs gerados pelo benchmark
     # -------------------
-    collector = DataCollector(results)
-    df = collector.create_dataframe()
+    collector = DataCollector(raw_folder="data/results/raw")
+    df_median, df_individual = collector.load_csvs()
 
-    collector.save_json("processed_benchmark.json")
-    collector.save_csv("processed_benchmark.csv")
-    print("Resultados processados salvos em data/results/processed/")
-
-    # Informação resumida
-    print(f"Linhas geradas no DataFrame: {len(df)}")
-    print(f"Algoritmos testados: {len(algorithms)}")
+    print(f"Linhas do DataFrame mediano: {len(df_median)}")
+    print(f"Linhas do DataFrame individual: {len(df_individual)}")
     print("Benchmark completo!")
+
+    # -------------------
+    # Executa análises empíricas com os dados medianos
+    # -------------------
+    time_analysis = TimeAnalysis(df_median).analyze()
+    memory_analysis = MemoryAnalysis(df_median).analyze()
+
+    # Gera relatório textual
+    report = ReportGenerator(time_analysis, memory_analysis)
+    report.print_report()
+
+    # Salvar resultados da análise em CSV
+    results_df = AnalysisExporter.to_dataframe(time_analysis, memory_analysis)
+    AnalysisExporter.save_csv(results_df, filename="empirical_analysis.csv")
+    print("\nAnálise empírica concluída!")
+
+    # -------------------
+    # Plotagem dos gráficos usando dados individuais
+    # -------------------
+    
+    plotter = Plotter(df_consolidado=df_median, df_individual=df_individual,
+                      output_dir="data/results/graphics")
+    plotter.plot_tempo_por_algoritmo()
+    plotter.plot_memoria_por_algoritmo()
+    plotter.plot_scaling_por_algoritmo()
+    plotter.plot_tipo_grafo()
+    plotter.plot_tempo_vs_clique()
+    plotter.plot_empirical_summary()
+    print("Gráficos gerados na pasta data/results/graphics")
 
 if __name__ == "__main__":
     main()
