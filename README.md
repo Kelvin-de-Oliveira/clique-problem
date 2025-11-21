@@ -34,17 +34,18 @@ clique-problem/
 
 - Python 3.10+
 - Dependências listadas em requirements.txt:
-
+- 
+```
 pip install -r requirements.txt
-
+```
 ---
 
 ## Como Executar
 
 1. Rode o benchmark principal:
-
+```
 python3 main.py
-
+```
 2. O fluxo principal:
    - Gera as suítes de grafos (TestSuiteGenerator)
    - Executa os algoritmos definidos em main.py (TestBenchmark)
