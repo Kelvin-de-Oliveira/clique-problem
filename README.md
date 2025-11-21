@@ -34,7 +34,7 @@ clique-problem/
 
 - Python 3.10+
 - Dependências listadas em requirements.txt:
-- 
+  
 ```
 pip install -r requirements.txt
 ```
