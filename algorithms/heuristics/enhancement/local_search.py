@@ -1,6 +1,6 @@
 from typing import Set, Dict
 from algorithms.base import CliqueAlgorithm
-from algorithms.heuristics.greedy.greedy_restarts import GreedyCliqueWithRestarts
+from algorithms import GreedyCliqueWithRestarts
 
 
 class LocalSearchClique(CliqueAlgorithm):
