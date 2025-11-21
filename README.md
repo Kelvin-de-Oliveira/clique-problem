@@ -6,7 +6,7 @@ O projeto inclui:
 - Algoritmos exatos (forca_bruta, backtracking, divide_conquer, programacao_dinamica)
 - Heurísticas e metaheurísticas (guloso, coloring, busca_local, genetic_algorithm)
 - Geração automática de grafos aleatórios, scale-free e com cliques embutidas
-- Coleta e processamento de resultados em JSON e CSV
+- Coleta e processamento de resultados
 
 ---
 
@@ -20,6 +20,9 @@ clique-problem/
 │   ├── results/
 │       ├── raw/         # Resultados brutos do benchmark
 │       └── processed/   # Resultados processados em JSON/CSV
+│ 
+│   ├── empirical_analysis/ # modulo para realizar analise 
+│ 
 ├── graphs/              # Geradores de grafos
 ├── main.py              # Script principal para rodar benchmarks
 ├── requirements.txt
@@ -45,24 +48,10 @@ python3 main.py
 2. O fluxo principal:
    - Gera as suítes de grafos (TestSuiteGenerator)
    - Executa os algoritmos definidos em main.py (TestBenchmark)
-   - Salva os resultados brutos em data/results/raw/benchmark_output.json
-   - Processa os resultados com DataCollector, gerando JSON e CSV em data/results/processed/
-
-3. Resultados processados incluem:
-   - grafo_id: índice do grafo na suíte
-   - algoritmo: nome do algoritmo
-   - tamanho_clique: tamanho da clique encontrada
-   - tempo_execucao: tempo em segundos
-   - uso_memoria: memória usada em bytes
-   - timeout: se ocorreu timeout
-   - erro: se ocorreu algum erro
-
----
-
-## Customização
-
-- É possível adicionar novos algoritmos ao dicionário algorithms em main.py
-- Você pode ajustar o timeout individual de cada execução com o parâmetro timeout_per_run em run_benchmarks()
+   - Salva os resultados brutos em data/results/raw/
+   - Processa os resultados com DataCollector, gerando dataframes para executar a analise de dados
+   - Empirical analysis, calcula o tempo médio e gasto médio de memório por algoritmo e determina sua ordem assintótica
+   - Plotter gera graficos comparitivos entre os algoritmos 
 
 ---
 
