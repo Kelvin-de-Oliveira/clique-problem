@@ -8,37 +8,39 @@ class TestSuiteGenerator:
     """
 
     @staticmethod
-    def generate_graphs_for_algorithm(ns, p=0.1, instances_per_n=3):
+    def generate_graphs_for_algorithm(ns, tipos_grafo=("random", "scale_free", "clique"), instances_per_n=3, **kwargs):
         """
-        Gera múltiplas instâncias de grafos aleatórios para cada n em ns.
+        Gera múltiplas instâncias de grafos de diferentes tipos para cada tamanho n.
+        Retorna lista de tuplas: (n, tipo_grafo, grafo)
         """
+        from graphs.generators import generate_graph  # usando função que encapsula tipos
+
         graphs = []
         for n in ns:
             for seed in range(instances_per_n):
-                random.seed(seed)  # para reprodutibilidade
-                g = generate_random_graph(n, p)
-                graphs.append((n, g))  # tupla (tamanho, grafo)
+                for tipo in tipos_grafo:
+                    random.seed(seed)
+                    g = generate_graph(n, tipo=tipo, **kwargs)
+                    graphs.append((n, tipo, g))  # armazenamos também o tipo de grafo
         return graphs
 
     @classmethod
     def generate_test_suite(cls):
-        """
-        Retorna um dicionário com as suítes ajustadas para cada tipo de algoritmo.
-        """
-        # Série de n por tipo de algoritmo
         ns_expo = [6, 8, 10, 12, 14, 16, 18, 20, 22, 24]       # força bruta / DP
         ns_bt = [10, 12, 14, 16, 18, 20, 22, 24, 26, 28]       # backtracking
-        ns_heur = [30, 50, 80, 120, 200, 300, 450, 700]        # heurísticas/gulosos
+        ns_heur = [30, 50, 80, 120, 200, 300, 450, 700, 900, 1000]        # heurísticas/gulosos
+
+        tipos_grafo = ("random", "scale_free", "clique")
 
         return {
-            "forca_bruta": cls.generate_graphs_for_algorithm(ns_expo, p=0.1),
-            "programacao_dinamica": cls.generate_graphs_for_algorithm(ns_expo, p=0.1),
-            "backtracking": cls.generate_graphs_for_algorithm(ns_bt, p=0.1),
-            "guloso_grau": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
-            "guloso_reinicios": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
-            "guloso_min_degree": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
-            "guloso_core": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
-            "heuristica_coloring": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
-            "heuristica_local_search": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
-            "meta_heuristica_genetico": cls.generate_graphs_for_algorithm(ns_heur, p=0.1),
+            "forca_bruta": cls.generate_graphs_for_algorithm(ns_expo, tipos_grafo=tipos_grafo),
+            "programacao_dinamica": cls.generate_graphs_for_algorithm(ns_expo, tipos_grafo=tipos_grafo),
+            "backtracking": cls.generate_graphs_for_algorithm(ns_bt, tipos_grafo=tipos_grafo),
+            "guloso_grau": cls.generate_graphs_for_algorithm(ns_heur, tipos_grafo=tipos_grafo),
+            "guloso_reinicios": cls.generate_graphs_for_algorithm(ns_heur, tipos_grafo=tipos_grafo),
+            "guloso_min_degree": cls.generate_graphs_for_algorithm(ns_heur, tipos_grafo=tipos_grafo),
+            "guloso_core": cls.generate_graphs_for_algorithm(ns_heur, tipos_grafo=tipos_grafo),
+            "heuristica_coloring": cls.generate_graphs_for_algorithm(ns_heur, tipos_grafo=tipos_grafo),
+            "heuristica_local_search": cls.generate_graphs_for_algorithm(ns_heur, tipos_grafo=tipos_grafo),
+            "meta_heuristica_genetico": cls.generate_graphs_for_algorithm(ns_heur, tipos_grafo=tipos_grafo),
         }

@@ -1,14 +1,13 @@
 import time
 import signal
 import os
-import json
+import csv
 from collections import defaultdict
-from typing import Dict, Any, Type
-from memory_profiler import memory_usage
+from typing import Dict, Type
+import statistics
+import tracemalloc
 
 from benchmarks.test_suite_generator import TestSuiteGenerator
-import psutil
-
 
 
 class TestBenchmark:
@@ -20,47 +19,40 @@ class TestBenchmark:
         self.algorithm_classes = algorithm_classes
         self.results = defaultdict(dict)
 
-    # ---------- execução com timeout ----------
+    # ---------- execução de um algoritmo com timeout e memória ----------
     def run_algorithm(self, AlgoClass, graph, timeout=300):
-        """
-        Recebe a classe do algoritmo (não instância). Instancia com o grafo e chama .run().
-        Mede tempo e memória. Usa signal.SIGALRM para timeout (Unix).
-        """
         start_time = time.time()
 
+        class TimeoutError(Exception):
+            pass
+
+        def timeout_handler(signum, frame):
+            raise TimeoutError()
+
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout)
+
         try:
-            class TimeoutError(Exception):
-                pass
-
-            def timeout_handler(signum, frame):
-                raise TimeoutError()
-
-             # registra handler e seta alarme
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(timeout)
-
-            # função que executa o algoritmo
-            def run_instance():
-                instance = AlgoClass(graph)
-                return instance.run()
-            
-            # roda e mede pico de memória em MB
-            mem_usage, result = memory_usage((run_instance,), retval=True, max_usage=True)
-            # desliga alarme
-            signal.alarm(0)
+            tracemalloc.start()
+            instance = AlgoClass(graph)
+            result = instance.run()
+            current, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
 
             end_time = time.time()
+            signal.alarm(0)
 
             return {
-                'clique': set(result) if result is not None else set(),
-                'tamanho': len(result) if result is not None else 0,
+                'clique': set(result) if result else set(),
+                'tamanho': len(result) if result else 0,
                 'tempo': end_time - start_time,
-                'memoria': mem_usage * 1024 * 1024,  # converte MB -> bytes
+                'memoria': peak / (1024*1024),
                 'timeout': False,
                 'erro': False
             }
-        
+
         except TimeoutError:
+            tracemalloc.stop()
             return {
                 'clique': set(),
                 'tamanho': 0,
@@ -69,8 +61,9 @@ class TestBenchmark:
                 'timeout': True,
                 'erro': False
             }
-        
+
         except Exception as e:
+            tracemalloc.stop()
             return {
                 'clique': set(),
                 'tamanho': 0,
@@ -81,51 +74,82 @@ class TestBenchmark:
                 'mensagem_erro': str(e)
             }
 
-    def get_memory_usage(self):
-        p = psutil.Process()
-        return p.memory_info().rss
+    # ---------- salvar resultados individuais ----------
+    def save_individual_results_csv(self, individual_results, filename="benchmark_individual.csv"):
+        output_csv_path = os.path.join("data", "results", "raw", filename)
+        os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
+        if not individual_results:
+            print("Nenhum resultado individual para salvar.")
+            return
+        with open(output_csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=individual_results[0].keys())
+            writer.writeheader()
+            writer.writerows(individual_results)
 
-    # ---------- execução completa ----------
-    def run_benchmarks(self, timeout_per_run=300):
+    # ---------- salvar CSV com medianas ----------
+    def save_median_csv(self):
+        median_rows = []
+        for algo_name, size_dict in self.results.items():
+            for n, res in size_dict.items():
+                median_rows.append({
+                    "algoritmo": algo_name,
+                    "tamanho_grafo": n,
+                    "tempo_mediano": res['tempo_mediano'],
+                    "memoria_mediana": res['memoria_mediana']
+                })
+
+        median_csv_path = os.path.join("data", "results", "raw", "benchmark_median.csv")
+        os.makedirs(os.path.dirname(median_csv_path), exist_ok=True)
+        with open(median_csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=median_rows[0].keys())
+            writer.writeheader()
+            writer.writerows(median_rows)
+
+    # ---------- execução completa de todos os benchmarks ----------
+    def run_benchmarks(self, timeout_per_run=300, debug_memory=False):
         test_suite = TestSuiteGenerator.generate_test_suite()
+        individual_results = []
 
-        for suite_name, graphs in test_suite.items():
-            print(f"\n=== Executando suite: {suite_name} ===")
-            for i, graph in enumerate(graphs):
-                print(f"Grafo {i+1}/{len(graphs)} - {len(graph)} vértices")
-                for algo_name, AlgoClass in self.algorithm_classes.items():
-                    # política: evita forca bruta e DP em grafos grandes
-                    if len(graph) > 25 and algo_name in ['forca_bruta', 'programacao_dinamica']:
-                        print(f"  Pulando {algo_name} (muitos vértices)")
-                        continue
-                    print(f"  Executando {algo_name}...")
-                    result = self.run_algorithm(AlgoClass, graph, timeout=timeout_per_run)
-                    # armazena
-                    self.results[suite_name][(i, algo_name)] = result
+        for algo_name, graphs in test_suite.items():
+            print(f"\n=== Executando algoritmo: {algo_name} ===")
+            results_by_n = {}
 
-                    if result.get('timeout'):
-                        print("    TIMEOUT")
-                    elif result.get('erro'):
-                        print("    ERRO", result.get('mensagem_erro', ''))
-                    else:
-                        print(f"    Clique: {result['tamanho']}, Tempo: {result['tempo']:.4f}s")
+            for n, tipo_grafo, graph in graphs:
+                if n not in results_by_n:
+                    results_by_n[n] = []
 
-        return self.results
+                result = self.run_algorithm(self.algorithm_classes[algo_name], graph, timeout=timeout_per_run)
+                result['tipo_grafo'] = tipo_grafo
+                results_by_n[n].append(result)
 
-    def save_results_json(self, filename="benchmark_output.json"):
-        output_path = os.path.join("data", "results", "raw", filename)
+                individual_results.append({
+                    "algoritmo": algo_name,
+                    "n": n,
+                    "tipo_grafo": tipo_grafo,
+                    "tamanho_clique": result['tamanho'],
+                    "tempo": result['tempo'],
+                    "memoria": result['memoria'],
+                    "timeout": result['timeout'],
+                    "erro": result['erro']
+                })
 
-    # garante que a pasta existe
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            # calcular medianas por tamanho
+            for n, result_list in results_by_n.items():
+                tempo_mediano = statistics.median([r['tempo'] for r in result_list])
+                memoria_mediana = statistics.median([r['memoria'] for r in result_list])
 
-        # converte sets em listas para JSON
-        serializable = {}
-        for suite, data in self.results.items():
-            serializable[suite] = {}
-            for key, res in data.items():
-                i, algo_name = key
-                res_copy = res.copy()
-                res_copy['clique'] = list(res_copy.get('clique', []))
-                serializable[suite][f"{i}_{algo_name}"] = res_copy
-        with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(serializable, f, ensure_ascii=False, indent=2)
+                if debug_memory:
+                    print(f"[DEBUG] {algo_name} n={n} -> memoria_mediana={memoria_mediana:.2f} MB")
+
+                print(f"n={n}, Tempo mediano: {tempo_mediano:.4f}s, Memória mediana: {memoria_mediana:.2f} MB")
+
+                if algo_name not in self.results:
+                    self.results[algo_name] = {}
+                self.results[algo_name][n] = {
+                    'tempo_mediano': tempo_mediano,
+                    'memoria_mediana': memoria_mediana
+                }
+
+        # salvar CSVs
+        self.save_individual_results_csv(individual_results)
+        self.save_median_csv()
