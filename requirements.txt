@@ -1,5 +1,5 @@
-psutil 
 networkx 
 matplotlib 
 numpy
 pandas
+seaborn
